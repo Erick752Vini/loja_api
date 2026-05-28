@@ -158,6 +158,80 @@ app.get('/movimentacoes/saidas', async (req, res) => {
     }
 });
 
+app.get('/produtos/alertas-estoque', async (req, res) => {
+    try {
+        const sql = `
+        SELECT
+        id,
+        nome,
+        quantidade,
+        CASE
+	    WHEN quantidade = 0 THEN 'MÍNIMO'
+      WHEN quantidade >= 100 THEN 'MÁXIMO'
+    END AS status_estoque, 
+    ROUND((quantidade / 100) * 100, 2) AS percentual_nivel
+    FROM produtos
+    WHERE quantidade = 0 OR quantidade >= 100;
+        `;
+
+        const [linhas] = await db.query(sql);
+
+        if (0 === linhas.length) {
+            return res.status(200).json({ mensagem: 'Nenhum produto em estado crítico.' });
+        }
+
+        res.status(200).json({
+            total_alertas: linhas.length,
+            produtos: linhas
+        });
+
+    } catch (erro) {
+        console.error('Erro:', erro);
+        res.status(500).json({ erro: 'Erro interno.' });
+    }
+});
+
+app.get('/movimentacoes/relatorio', async (req, res) => {
+    try {
+        const sql = `
+            SELECT 
+                p.nome AS produto,
+                SUM(CASE WHEN m.dt_entrada IS NOT NULL THEN m.quantidade ELSE 0 END) AS total_entradas,
+                SUM(CASE WHEN m.dt_saida IS NOT NULL THEN m.quantidade ELSE 0 END) AS total_saidas
+            FROM movimentacoes m
+            JOIN produtos p ON p.id = m.id_produto
+            GROUP BY p.nome
+            ORDER BY p.nome
+        `;
+
+        const [linhas] = await db.query(sql);
+        res.status(200).json(linhas);
+
+    } catch (erro) {
+        console.error('Erro ao gerar relatório:', erro);
+        res.status(500).json({ erro: 'Erro interno ao gerar relatório.' });
+    }
+});
+
+app.get('/produtos/volume', async (req, res) => {
+    try {
+        const sql = `
+            SELECT
+            p.nome,
+            m.dt_entrada,
+            m.dt_saida
+            FROM movimentacoes m 
+            INNER JOIN produtos p ON p.id = m.id_produto
+            `;
+            const [linhas] = await db.query(sql);
+            res.status(200).json(linhas);
+
+    } catch (erro) {
+        console.error('Erro', erro);
+        res.status(200).status.json({erro: err.message})
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
